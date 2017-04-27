@@ -1,7 +1,7 @@
-rundeck-slack-incoming-webhook-plugin
+rundeck-team-incoming-webhook-plugin
 ======================
 
-Sends rundeck notification messages to a slack channel.  This plugin  is based on [rundeck-slack-plugin](https://github.com/bitplaces/rundeck-slack-plugin)(based on run-hipchat-plugin).
+Sends rundeck notification messages to a teams channel.  This plugin  is based on [rundeck-slack-plugin](https://github.com/bitplaces/rundeck-slack-plugin)(based on run-hipchat-plugin).
 
 Installation Instructions
 -------------------------
@@ -10,7 +10,7 @@ See the [Included Plugins | Rundeck Documentation](http://rundeck.org/docs/plugi
 
 ## Download jarfile
 
-1. Download jarfile from [releases](https://github.com/higanworks/rundeck-slack-incoming-webhook-plugin/releases).
+1. Download jarfile from [releases](https://github.com/bageera/rundeck-team-webhook/releases).
 2. copy jarfile to `$RDECK_BASE/libext`
 
 ## Build
@@ -26,9 +26,9 @@ This plugin uses Slack incoming-webhooks. Create a new webhook and copy the prov
 
 The only required configuration settings are:
 
-- `WebHook URL`: Slack incoming-webhook URL.
+- `WebHook URL`: Teams incoming-webhook URL.
 
-## Slack message example.
+## Teams message example.
 
 On success.
 
@@ -39,6 +39,7 @@ On failure.
 ![on failure](on_failure.png)
 
 ## Contributors
+*  Original [higanworks/rundeck-slack-incoming-webhook-plugin](https://github.com/higanworks/rundeck-slack-incoming-webhook-plugin) author: @sawanoboly
 *  Original [hbakkum/rundeck-hipchat-plugin](https://github.com/hbakkum/rundeck-hipchat-plugin) author: Hayden Bakkum @hbakkum
 *  Original [bitplaces/rundeck-slack-plugin](https://github.com/bitplaces/rundeck-slack-plugin) authors
     *  @totallyunknown
