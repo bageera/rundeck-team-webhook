@@ -118,7 +118,9 @@ public class TeamNotificationPlugin implements NotificationPlugin {
         String ms = "payload=" + URLEncoder.encode(message);
         //String ms = message;
 
-        if ("ok".equals(teamResponse)) {
+	//If the POST succeds, it'll return 1
+	//Ref:https://docs.microsoft.com/en-us/microsoftteams/platform/concepts/connectors#post-a-message-to-the-webhook-using-curl
+	if ("1".equals(teamResponse)) {
             return true;
         } else {
             // Unfortunately there seems to be no way to obtain a reference to the plugin logger within notification plugins,
