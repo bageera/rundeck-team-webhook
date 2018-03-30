@@ -19,7 +19,7 @@ repositories {
 
 dependencies {
     pluginLibs group: 'org.freemarker', name: 'freemarker', version: '2.3.20'
-    compile(group:'org.rundeck', name: 'rundeck-core', version: '2.1.1')
+    compile(group:'org.rundeck', name: 'rundeck-core', version: '2.10.6')
 }
 
 // task to copy plugin libs to output/lib dir
