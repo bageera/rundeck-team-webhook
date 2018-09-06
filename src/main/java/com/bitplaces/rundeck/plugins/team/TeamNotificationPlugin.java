@@ -24,10 +24,7 @@ import com.dtolabs.rundeck.plugins.descriptions.PluginProperty;
 import com.dtolabs.rundeck.plugins.notification.NotificationPlugin;
 
 import java.io.*;
-import java.net.HttpURLConnection;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.net.URLEncoder;
+import java.net.*;
 import java.util.*;
 
 import freemarker.cache.ClassTemplateLoader;
@@ -72,7 +69,6 @@ public class TeamNotificationPlugin implements NotificationPlugin {
      * @param trigger name of job notification event causing notification
      * @param executionData job execution data
      * @param config plugin configuration
-     * @throws SlackNotificationPluginException when any error occurs sending the Slack message
      * @return true, if the Slack API response indicates a message was successfully delivered to a chat room
      */
     public boolean postNotification(String trigger, Map executionData, Map config) {
@@ -203,11 +199,30 @@ public class TeamNotificationPlugin implements NotificationPlugin {
 
     private HttpURLConnection openConnection(URL requestUrl) {
         try {
-            return (HttpURLConnection) requestUrl.openConnection();
+            String proxy_host=System.getProperty("http.proxyHost");
+            String proxy_port=System.getProperty("http.proxyPort");
+            String proxy_user=System.getProperty("http.proxyUser");
+            String proxy_pass=System.getProperty("http.proxyPassword");
+
+
+            String proxyHost = proxy_host;
+            int proxyPort = Integer.valueOf(proxy_port);
+            String proxyUser = proxy_user;
+            String proxyPassword = proxy_pass;
+            Proxy proxy = new Proxy(Proxy.Type.HTTP, new InetSocketAddress(proxyHost, proxyPort));
+            HttpURLConnection uc =  (HttpURLConnection) requestUrl.openConnection(proxy);
+            if(proxy_user!=null && !"".equals(proxy_user)) {
+                String encoded = new String
+                        (Base64.getEncoder().encodeToString(new String(proxyUser + ":" + proxyPassword).getBytes()));
+                uc.setRequestProperty("Proxy-Authorization", "Basic " + encoded);
+            }
+            return uc;
         } catch (IOException ioEx) {
             throw new TeamNotificationPluginException("Error opening connection to Teams URL: [" + ioEx.getMessage() + "].", ioEx);
         }
     }
+
+
 
     private void putRequestStream(HttpURLConnection connection, String message) {
         try {
@@ -270,5 +285,31 @@ public class TeamNotificationPlugin implements NotificationPlugin {
             this.template = template;
         }
     }
+    public static void main(String[] args) {
+        try {
+            String proxy_host=System.getProperty("http.proxyHost");
+            String proxy_port=System.getProperty("http.proxyPort");
+            String proxy_user=System.getProperty("http.proxyUser");
+            String proxy_pass=System.getProperty("http.proxyPassword");
 
+            URL url = new URL("https://www.google.com");
+            String proxyHost = proxy_host;
+            int proxyPort = Integer.valueOf(proxy_port);
+            String proxyUser = proxy_user;
+            String proxyPassword = proxy_pass;
+            Proxy proxy = new Proxy(Proxy.Type.HTTP, new InetSocketAddress(proxyHost, proxyPort));
+            HttpURLConnection uc =  (HttpURLConnection) url.openConnection(proxy);
+            if(proxy_user!=null && !"".equals(proxy_user)) {
+                String encoded = new String
+                        (Base64.getEncoder().encodeToString(new String(proxyUser + ":" + proxyPassword).getBytes()));
+                uc.setRequestProperty("Proxy-Authorization", "Basic " + encoded);
+            }
+            System.out.println(uc.getResponseCode());
+            System.out.println(uc.getResponseMessage());
+
+        }catch (Exception e){
+            e.printStackTrace();
+        }
+    }
 }
+
