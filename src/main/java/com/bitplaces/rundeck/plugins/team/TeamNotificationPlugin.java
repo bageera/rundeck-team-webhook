@@ -285,31 +285,5 @@ public class TeamNotificationPlugin implements NotificationPlugin {
             this.template = template;
         }
     }
-    public static void main(String[] args) {
-        try {
-            String proxy_host=System.getProperty("http.proxyHost");
-            String proxy_port=System.getProperty("http.proxyPort");
-            String proxy_user=System.getProperty("http.proxyUser");
-            String proxy_pass=System.getProperty("http.proxyPassword");
-
-            URL url = new URL("https://www.google.com");
-            String proxyHost = proxy_host;
-            int proxyPort = Integer.valueOf(proxy_port);
-            String proxyUser = proxy_user;
-            String proxyPassword = proxy_pass;
-            Proxy proxy = new Proxy(Proxy.Type.HTTP, new InetSocketAddress(proxyHost, proxyPort));
-            HttpURLConnection uc =  (HttpURLConnection) url.openConnection(proxy);
-            if(proxy_user!=null && !"".equals(proxy_user)) {
-                String encoded = new String
-                        (Base64.getEncoder().encodeToString(new String(proxyUser + ":" + proxyPassword).getBytes()));
-                uc.setRequestProperty("Proxy-Authorization", "Basic " + encoded);
-            }
-            System.out.println(uc.getResponseCode());
-            System.out.println(uc.getResponseMessage());
-
-        }catch (Exception e){
-            e.printStackTrace();
-        }
-    }
 }
 
