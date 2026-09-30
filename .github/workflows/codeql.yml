@@ -7,6 +7,7 @@ on:
   push:
     branches: [master, 'release/**']
   pull_request:
+  workflow_dispatch:
   schedule:
     - cron: '23 6 * * 1' # weekly, Mondays
 
