@@ -1,4 +1,4 @@
-
+<#-- Rundeck -> Microsoft Teams Incoming Webhook (Office 365 Connector card) -->
 <#if executionData.job.group??>
     <#assign jobName="${executionData.job.group} / ${executionData.job.name}">
 <#else>
@@ -18,24 +18,24 @@
 </#if>
 
 {
-  "text": "${message}",
-  "title": "Rundeck Job ${jobName}",
+  "text": "${message?json_string}",
+  "title": "Rundeck Job ${jobName?json_string}",
   "themeColor": "${theme}",
   "sections": [
-  {
+    {
       "title": "Job Details",
       "facts": [
         {
           "name": "Job Name",
-          "value": "${jobName}"
+          "value": "${jobName?json_string}"
         },
         {
           "name": "Job Status",
           "value": "${state}"
         },
         {
-          "name": "Started By:",
-          "value": "${executionData.user}"
+          "name": "Started By",
+          "value": "${executionData.user?json_string}"
         }
       ]
     }
@@ -45,7 +45,7 @@
       "@context": "http://schema.org",
       "@type": "ViewAction",
       "name": "View in Rundeck",
-      "target": ["${executionData.job.href}"]
+      "target": [ "${executionData.job.href?json_string}" ]
     }
   ]
 }
