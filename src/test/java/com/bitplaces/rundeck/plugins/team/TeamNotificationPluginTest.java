@@ -239,13 +239,19 @@ class TeamNotificationPluginTest {
         HttpServer server = startServer(202, "", body);
         try {
             TeamNotificationPlugin p = pluginWithWebhook(
-                    "https://outlook.office.com/webhook/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee@bbbbbbbb/IncomingWebhook/abcdef/ghijk");
-            // host check: cannot force webhook.office.com on 127.0.0.1, so pin format
+                    "http://127.0.0.1:" + server.getAddress().getPort() + "/");
+            // pin Adaptive format: the local test server host would
+            // auto-resolve to the legacy connector card
             java.lang.reflect.Field f = TeamNotificationPlugin.class.getDeclaredField("messageFormat");
             f.setAccessible(true);
             f.set(p, "adaptive");
 
             assertTrue(p.postNotification("success", executionData("g", "j", "u", "1"), new HashMap<>()));
+
+            // Adaptive Card payload actually sent
+            String json = new String(body.get(), StandardCharsets.UTF_8);
+            assertTrue(json.contains("AdaptiveCard"), json);
+            assertFalse(json.contains("themeColor"), "unexpected MessageCard payload: " + json);
         } finally {
             server.stop(0);
         }
