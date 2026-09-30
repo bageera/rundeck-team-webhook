@@ -101,9 +101,137 @@ class TeamNotificationPluginTest {
     // ---- trigger validation -------------------------------------------
 
     @Test
-    void unknownTriggerThrows() {
-        assertThrows(IllegalArgumentException.class,
-                () -> plugin.postNotification("bogus", executionData("g", "j", "u", "1"), new HashMap<>()));
+    void unknownTriggersRenderFallbackCardInsteadOfThrowing() throws Exception {
+        // Rundeck may add triggers; the plugin must degrade gracefully,
+        // not fail the notification (docs contract: plugin is the last stop).
+        AtomicReference<byte[]> body = new AtomicReference<>();
+        HttpServer server = startServer(200, "1", body);
+        try {
+            TeamNotificationPlugin p = pluginWithWebhook(
+                    "http://127.0.0.1:" + server.getAddress().getPort() + "/");
+            java.lang.reflect.Field f = TeamNotificationPlugin.class.getDeclaredField("messageFormat");
+            f.setAccessible(true);
+            f.set(p, "card");
+
+            for (String odd : new String[]{"bogus", "", null, "onretryablefailure", "retryablefailure",
+                                           "onavgduration", "avgduration"}) {
+                Map<String, Object> data = executionData("g", "j", "u", "1");
+                assertTrue(p.postNotification(odd, data, new HashMap<>()),
+                        "odd trigger should not throw: " + odd);
+            }
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void normalizeTriggerStripsOnPrefix() {
+        assertEquals("start", TeamNotificationPlugin.normalizeTrigger("onstart"));
+        assertEquals("success", TeamNotificationPlugin.normalizeTrigger("onsuccess"));
+        assertEquals("failure", TeamNotificationPlugin.normalizeTrigger("onfailure"));
+        assertEquals("avgduration", TeamNotificationPlugin.normalizeTrigger("onavgduration"));
+        assertEquals("retryablefailure", TeamNotificationPlugin.normalizeTrigger("onretryablefailure"));
+        // unprefixed passthrough
+        assertEquals("start", TeamNotificationPlugin.normalizeTrigger("start"));
+        assertEquals("failure", TeamNotificationPlugin.normalizeTrigger("FAILURE"));
+        // null / blank
+        assertEquals("unknown", TeamNotificationPlugin.normalizeTrigger(null));
+        assertEquals("unknown", TeamNotificationPlugin.normalizeTrigger("  "));
+    }
+
+    @Test
+    void allFiveDocumentedTriggersRenderBothFormats() throws Exception {
+        AtomicReference<byte[]> body = new AtomicReference<>();
+        final AtomicReference<String> contentType = new AtomicReference<>();
+        HttpServer server = startServer(200, "1", body, contentType);
+        try {
+            for (String format : new String[]{"card", "adaptive"}) {
+                TeamNotificationPlugin p = pluginWithWebhook(
+                        "http://127.0.0.1:" + server.getAddress().getPort() + "/");
+                java.lang.reflect.Field f = TeamNotificationPlugin.class.getDeclaredField("messageFormat");
+                f.setAccessible(true);
+                f.set(p, format);
+
+                for (String t : new String[]{"onstart", "onsuccess", "onfailure",
+                                             "onavgduration", "onretryablefailure"}) {
+                    assertTrue(p.postNotification(t, executionData("g", "j", "u", "1"), new HashMap<>()),
+                            "trigger should render: " + format + "/" + t);
+                }
+            }
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void failureCardIncludesDocumentedNodeAndProjectData() throws Exception {
+        Map<String, Object> job = new HashMap<>();
+        job.put("group", "ops");
+        job.put("name", "deploy");
+        job.put("href", "https://rundeck.example.com/job/deploy");
+        job.put("description", "Weekly deploy to staging");
+
+        Map<String, Object> execution = new HashMap<>();
+        execution.put("project", "prod");
+        execution.put("failedNodeListString", "node-3, node-7");
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("id", "9");
+        data.put("user", "carol");
+        data.put("href", "https://rundeck.example.com/execution/9");
+        data.put("job", job);
+        data.put("execution", execution);
+
+        TeamNotificationPlugin p = new TeamNotificationPlugin();
+        java.lang.reflect.Field urlField = TeamNotificationPlugin.class.getDeclaredField("webhookUrl");
+        urlField.setAccessible(true);
+        urlField.set(p, "https://example.webhook.office.com/x");
+
+        java.lang.reflect.Method m = TeamNotificationPlugin.class.getDeclaredMethod("generateMessage",
+                String.class, Map.class, Map.class);
+        m.setAccessible(true);
+        String json = (String) m.invoke(p, "failure", data, new HashMap<>());
+
+        jakarta.json.JsonReader reader = jakarta.json.Json.createReader(new java.io.StringReader(json));
+        jakarta.json.JsonObject card = reader.readObject().getJsonArray("attachments")
+                .getJsonObject(0).getJsonObject("content");
+
+        boolean hasProject = false, hasNodes = false, hasDesc = false;
+        for (jakarta.json.JsonValue v : card.getJsonArray("body")) {
+            jakarta.json.JsonObject o = v.asJsonObject();
+            if (o.containsKey("facts")) {
+                for (jakarta.json.JsonValue fact : o.getJsonArray("facts")) {
+                    jakarta.json.JsonObject f = fact.asJsonObject();
+                    String title = f.getString("title", f.getString("name", ""));
+                    String value = f.getString("value", "");
+                    if ("Project".equals(title) && "prod".equals(value)) hasProject = true;
+                    if ("Failed Nodes".equals(title) && value.contains("node-3") && value.contains("node-7")) hasNodes = true;
+                    if ("Description".equals(title) && value.contains("staging")) hasDesc = true;
+                }
+            }
+        }
+        assertTrue(hasProject, "Project fact missing: " + json);
+        assertTrue(hasNodes, "Failed Nodes fact missing: " + json);
+        assertTrue(hasDesc, "Description fact missing: " + json);
+    }
+
+    @Test
+    void startCardOmitsCompletionOnlyFields() throws Exception {
+        // on-start data has no failedNodeList etc.; guard must not render
+        // empty fact boxes.
+        Map<String, Object> data = executionData("g", "j", "u", "1");
+        TeamNotificationPlugin p = new TeamNotificationPlugin();
+        java.lang.reflect.Field urlField = TeamNotificationPlugin.class.getDeclaredField("webhookUrl");
+        urlField.setAccessible(true);
+        urlField.set(p, "https://example.webhook.office.com/x");
+
+        java.lang.reflect.Method m = TeamNotificationPlugin.class.getDeclaredMethod("generateMessage",
+                String.class, Map.class, Map.class);
+        m.setAccessible(true);
+        String json = (String) m.invoke(p, "start", data, new HashMap<>());
+
+        assertFalse(json.contains("Failed Nodes"), json);
+        assertFalse(json.contains("\"Project\"") || json.contains("\"Project\","), "unexpected project fact: " + json);
     }
 
     // ---- template rendering / JSON escaping ---------------------------

@@ -108,6 +108,12 @@ public class TeamNotificationPlugin implements NotificationPlugin {
      * Sends a message to a Microsoft Teams channel when a job notification event
      * is raised by Rundeck.
      *
+     * <p>Trigger normalization: Rundeck versions have sent both unprefixed
+     * (start/success/failure) and on-prefixed (onstart/...) names, and
+     * supports five triggers total (start, success, failure, avgduration,
+     * retryablefailure). Unknown triggers map to a neutral fallback card
+     * instead of failing the notification.</p>
+     *
      * @param trigger       name of job notification event causing notification
      * @param executionData job execution data
      * @param config        plugin configuration
@@ -115,13 +121,7 @@ public class TeamNotificationPlugin implements NotificationPlugin {
      */
     @Override
     public boolean postNotification(String trigger, Map executionData, Map config) {
-        if (!TRIGGER_START.equals(trigger)
-                && !TRIGGER_SUCCESS.equals(trigger)
-                && !TRIGGER_FAILURE.equals(trigger)) {
-            throw new IllegalArgumentException("Unknown trigger type: [" + trigger + "].");
-        }
-
-        String message = generateMessage(trigger, executionData, config);
+        String message = generateMessage(normalizeTrigger(trigger), executionData, config);
         WebhookResult result = invokeTeamAPIMethod(webhookUrl, message);
 
         // Legacy O365 Connector webhooks answer 200 with body "1"; Workflows
@@ -145,6 +145,19 @@ public class TeamNotificationPlugin implements NotificationPlugin {
     }
 
     /**
+     * Normalizes Rundeck trigger names to our canonical unprefixed form:
+     * strips an optional "on" prefix (onstart -> start, onavgduration ->
+     * avgduration, ...) and lowercases; null/blank becomes "unknown".
+     */
+    static String normalizeTrigger(String trigger) {
+        if (trigger == null || trigger.trim().isEmpty()) {
+            return "unknown";
+        }
+        String t = trigger.trim().toLowerCase();
+        return t.startsWith("on") ? t.substring(2) : t;
+    }
+
+    /**
      * Truncated, single-line view of a response body for error messages —
      * avoids dumping full payloads into logs.
      */
@@ -160,18 +173,9 @@ public class TeamNotificationPlugin implements NotificationPlugin {
     }
 
     private String generateMessage(String trigger, Map executionData, Map config) {
-        String color;
-        if (TRIGGER_START.equals(trigger)) {
-            color = TEAM_MESSAGE_COLOR_YELLOW;
-        } else if (TRIGGER_SUCCESS.equals(trigger)) {
-            color = TEAM_MESSAGE_COLOR_GREEN;
-        } else {
-            color = TEAM_MESSAGE_COLOR_RED;
-        }
-
         Map<String, Object> model = new HashMap<String, Object>();
         model.put("trigger", trigger);
-        model.put("color", color);
+        model.put("color", colorForTrigger(trigger));
         model.put("executionData", executionData);
         model.put("config", config);
 
@@ -188,6 +192,21 @@ public class TeamNotificationPlugin implements NotificationPlugin {
         }
 
         return sw.toString();
+    }
+
+    /**
+     * Card color per normalized trigger. Everything that is not
+     * start/success maps to red-style attention: failure, avgduration,
+     * retryablefailure, unknown, anything Rundeck adds later.
+     */
+    private static String colorForTrigger(String trigger) {
+        if (TRIGGER_START.equals(trigger)) {
+            return TEAM_MESSAGE_COLOR_YELLOW;
+        }
+        if (TRIGGER_SUCCESS.equals(trigger)) {
+            return TEAM_MESSAGE_COLOR_GREEN;
+        }
+        return TEAM_MESSAGE_COLOR_RED;
     }
 
     /**

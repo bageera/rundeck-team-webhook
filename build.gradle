@@ -7,7 +7,7 @@ java {
     targetCompatibility = JavaVersion.VERSION_11
 }
 
-project.version = '0.9.0-yeast-bloom'
+project.version = '0.9.1'
 group = 'com.bitplaces.rundeck.plugins'
 
 defaultTasks 'clean', 'build'
@@ -55,7 +55,7 @@ jar {
     // include contents of output dir
     from(layout.buildDirectory.dir('output'))
     manifest {
-        attributes 'Rundeck-Plugin-Version': '1.1',
+        attributes 'Rundeck-Plugin-Version': '1.2',
                    'Rundeck-Plugin-Archive': 'true',
                    'Rundeck-Plugin-File-Version': "${project.version}"
         // create space-separated list of pluginLibs
