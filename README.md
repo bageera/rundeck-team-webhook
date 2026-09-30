@@ -2,14 +2,55 @@ rundeck-team-incoming-webhook-plugin
 ====================================
 
 Sends Rundeck job notification messages to a Microsoft Teams channel via a
-Teams Incoming Webhook (Office 365 Connector). Based on
+Teams Incoming Webhook. Based on
 [rundeck-slack-plugin](https://github.com/bitplaces/rundeck-slack-plugin)
 and run-hipchat-plugin.
 
-Version 0.8.0-yeast-bloom modernizes the build (Gradle 9 / Java 11 target),
-upgrades FreeMarker to 2.3.34, and fixes several bugs (proxy
-NullPointerException, UTF-8 payload encoding, JSON escaping in message
-templates). See [CHANGELOG.md](CHANGELOG.md) for details.
+## Current release: 0.9.0-yeast-bloom
+
+- **Microsoft Teams Workflows (Power Automate) webhooks are supported end to
+  end** — the supported webhook type since Microsoft retired the Office 365
+  Connectors format this plugin originally used (retirement completed
+  2026-05-22; [issue #6](https://github.com/bageera/rundeck-team-webhook/issues/6)).
+- Payload format auto-detection with a manual override (`Message Format`):
+  Adaptive Card for Workflows, MessageCard for legacy connector URLs.
+- HTTP-status-based success detection (`2xx` = delivered) — covers both the
+  legacy connector `200` + `1` response and the Workflows `202 Accepted`
+  empty-body response.
+- Actionable HTTP 429 rate-limit errors (Teams allows roughly 4
+  requests/second/webhook); response echoes in errors truncate to 200 chars.
+- Security hardening: JSON-escaped message payloads (`?json_string`), no
+  payload dumps in error logs, optional proxy support (no crash when unset),
+  UTF-8 payload encoding, 10s connect/read timeouts.
+- Modern build: Gradle 9.5.1 wrapper, Java 11 bytecode, FreeMarker 2.3.34.
+- 14 unit tests (JUnit 5), run on every build; CI + CodeQL security scanning
+  on GitHub Actions.
+- Security policy with private disclosure: see [SECURITY.md](SECURITY.md)
+  (security@nocturnalinc.com).
+
+Full change history: [CHANGELOG.md](CHANGELOG.md).
+
+## Upgrading: connector webhook -> Workflows webhook
+
+If you are on <= 0.8.x with an old Office 365 Connector URL, the connector is
+dead — Microsoft blocked it in May 2026. Create a Workflows webhook:
+
+1. In Teams: **Workflows** app → choose the **"Send messages in Teams using
+   incoming webhooks"** template (or build a flow around the **"When a Teams
+   webhook request is received"** trigger).
+2. Copy the generated URL (a `webhook.office.com` address).
+3. Update the plugin jar in `$RDECK_BASE/libext` to 0.9.0-yeast-bloom.
+4. In the Rundeck notification config, paste the new URL as `WebHook URL`.
+   Leave `Message Format` on `auto` — nothing else to change.
+
+Operator notes:
+
+- Messages post as the Flow bot; bot icon/name customization is not available
+  for webhook posts (Microsoft limitation, not the plugin's).
+- The old screenshots below show MessageCard/connector cards. Adaptive Card
+  output looks similar but flows through the Workflows bot.
+- A Workflows webhook is tied to its flow owner; assign a co-owner in Power
+  Automate so notifications don't stop if the owner leaves.
 
 ## Download jarfile
 
@@ -23,7 +64,8 @@ Requires a JDK (11+ works; the plugin targets Java 11 bytecode):
 
     ./gradlew clean build
 
-The plugin jar lands in `build/libs/` and embedded libs in
+The plugin jar lands in `build/libs/` (e.g.
+`rundeck-team-webhook-0.9.0-yeast-bloom.jar`) and embedded libs in
 `build/output/lib/`. The `rundeck-core` dependency is `compileOnly` — it is
 provided by Rundeck at runtime and is not bundled into the plugin archive.
 Unit tests run automatically as part of `build`; run them alone with
@@ -35,19 +77,25 @@ Install locally from source:
 
 ## Configuration
 
-This plugin uses Teams Incoming Webhooks. In the Teams channel, add an
-"Incoming Webhook" connector, create one, and copy the URL it provides.
-
-![configuration](config.png)
-
-The only required configuration setting:
-
-- `WebHook URL` — Teams Incoming Webhook URL.
+- `WebHook URL` — Teams Incoming Webhook URL (required).
+- `Message Format` — `auto` (default: Adaptive Card for `webhook.office.com`
+  URLs, MessageCard otherwise), or pinned `adaptive` / `card`.
 
 The webhook URL is a bearer credential for your channel — store it only in
 Rundeck configuration, never in source control. See
 [SECURITY.md](SECURITY.md) for the security policy (private reports:
 security@nocturnalinc.com) and operator security notes.
+
+## Message examples
+
+Legacy connector MessageCard screenshots (Workflows Adaptive Card output is
+similar), on success:
+
+![on success](on_success.png)
+
+On failure:
+
+![on failure](on_failure.png)
 
 ## Proxy support
 
@@ -60,16 +108,6 @@ options):
 Optional proxy authentication:
 
     -Dhttp.proxyUser=domain\\user -Dhttp.proxyPassword=secret
-
-## Teams message examples
-
-On success:
-
-![on success](on_success.png)
-
-On failure:
-
-![on failure](on_failure.png)
 
 ## Contributors
 

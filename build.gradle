@@ -7,7 +7,7 @@ java {
     targetCompatibility = JavaVersion.VERSION_11
 }
 
-project.version = '0.8.0-yeast-bloom'
+project.version = '0.9.1'
 group = 'com.bitplaces.rundeck.plugins'
 
 defaultTasks 'clean', 'build'
@@ -33,6 +33,8 @@ dependencies {
     testImplementation platform('org.junit:junit-bom:5.13.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    // JSON parsing for Adaptive Card template shape assertions
+    testImplementation 'org.eclipse.parsson:jakarta.json:1.1.7'
     // rundeck-core is compileOnly for main, but tests exercise the plugin
     // class directly, so they need it on the test compile+runtime classpath.
     // It is NOT added to pluginLibs (never bundled into the plugin archive).
@@ -53,7 +55,7 @@ jar {
     // include contents of output dir
     from(layout.buildDirectory.dir('output'))
     manifest {
-        attributes 'Rundeck-Plugin-Version': '1.1',
+        attributes 'Rundeck-Plugin-Version': '1.2',
                    'Rundeck-Plugin-Archive': 'true',
                    'Rundeck-Plugin-File-Version': "${project.version}"
         // create space-separated list of pluginLibs

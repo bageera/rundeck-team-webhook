@@ -4,6 +4,7 @@ on:
   push:
     branches: [master, 'release/**']
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -42,6 +43,7 @@ jobs:
     name: Dependency Review (vulnerabilities & licenses)
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
+    continue-on-error: true # informational until repo dependency graph is enabled; job errors "not supported" otherwise
     steps:
       - name: Checkout
         uses: actions/checkout@v4
