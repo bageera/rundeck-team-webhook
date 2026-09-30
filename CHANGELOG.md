@@ -44,6 +44,9 @@ test suite and CI-ready build. Named releases start here.
 
 ### Added
 - `CHANGELOG.md` (this file).
+- `SECURITY.md` security policy — private vulnerability reports to
+  security@nocturnalinc.com, coordinated disclosure, operator security
+  notes.
 - First unit test suite (JUnit 5): template rendering/escaping for all three
   triggers with hostile job names, trigger validation, and webhook POST
   success/failure paths exercised against an in-process HTTP server,
