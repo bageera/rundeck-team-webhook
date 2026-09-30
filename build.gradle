@@ -1,14 +1,23 @@
-apply plugin: 'java'
-sourceCompatibility = 1.6
-project.version = "0.7-proxy"
+plugins {
+    id 'java'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+}
+
+project.version = '0.8.0-yeast-bloom'
+group = 'com.bitplaces.rundeck.plugins'
+
 defaultTasks 'clean', 'build'
 
-configurations{
-    //declare custom pluginLibs configuration to include only libs for this plugin
+configurations {
+    // declare custom pluginLibs configuration to include only libs for this plugin
     pluginLibs
 
-    //declare compile to extend from pluginLibs so it inherits the dependencies
-    compile{
+    // declare compile to extend from pluginLibs so it inherits the dependencies
+    implementation {
         extendsFrom pluginLibs
     }
 }
@@ -18,30 +27,45 @@ repositories {
 }
 
 dependencies {
-    pluginLibs group: 'org.freemarker', name: 'freemarker', version: '2.3.20'
-    compile(group:'org.rundeck', name: 'rundeck-core', version: '2.10.6')
+    pluginLibs group: 'org.freemarker', name: 'freemarker', version: '2.3.34'
+    compileOnly(group: 'org.rundeck', name: 'rundeck-core', version: '2.10.6')
+
+    testImplementation platform('org.junit:junit-bom:5.13.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    // rundeck-core is compileOnly for main, but tests exercise the plugin
+    // class directly, so they need it on the test compile+runtime classpath.
+    // It is NOT added to pluginLibs (never bundled into the plugin archive).
+    testImplementation(group: 'org.rundeck', name: 'rundeck-core', version: '2.10.6')
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
 }
 
 // task to copy plugin libs to output/lib dir
-task copyToLib(type: Copy) {
-    into "$buildDir/output/lib"
+tasks.register('copyToLib', Copy) {
+    into layout.buildDirectory.dir('output/lib')
     from configurations.pluginLibs
 }
 
 jar {
-    //include contents of output dir
-    from "$buildDir/output"
+    // include contents of output dir
+    from(layout.buildDirectory.dir('output'))
     manifest {
-        attributes 'Rundeck-Plugin-Version': '1.1', 'Rundeck-Plugin-Archive': 'true','Rundeck-Plugin-File-Version': "${project.version}"
-        //create space-separated list of pluginLibs
-        def libList = configurations.pluginLibs.collect{'lib/'+it.name}.join(' ')
-        attributes 'Rundeck-Plugin-Classnames': 'com.bitplaces.rundeck.plugins.team.TeamNotificationPlugin', 'Rundeck-Plugin-Libs': "${libList}"
+        attributes 'Rundeck-Plugin-Version': '1.1',
+                   'Rundeck-Plugin-Archive': 'true',
+                   'Rundeck-Plugin-File-Version': "${project.version}"
+        // create space-separated list of pluginLibs
+        def libList = configurations.pluginLibs.collect { 'lib/' + it.name }.join(' ')
+        attributes 'Rundeck-Plugin-Classnames': 'com.bitplaces.rundeck.plugins.team.TeamNotificationPlugin',
+                   'Rundeck-Plugin-Libs': "${libList}"
     }
 }
 
-//set jar task to depend on copyToLib
+// set jar task to depend on copyToLib
 jar.dependsOn(copyToLib)
 
-task wrapper(type: Wrapper) {
-    gradleVersion = '1.10'
+wrapper {
+    gradleVersion = '9.5.1'
 }

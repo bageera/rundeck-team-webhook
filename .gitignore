@@ -1,6 +1,8 @@
-.idea
+.gradle/
+build/
+out/
+.idea/
 *.iml
-target
-build
-.gradle
+target/
 classes
+.DS_Store
