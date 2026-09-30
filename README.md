@@ -2,14 +2,17 @@ rundeck-team-incoming-webhook-plugin
 ====================================
 
 Sends Rundeck job notification messages to a Microsoft Teams channel via a
-Teams Incoming Webhook (Office 365 Connector). Based on
+Teams Incoming Webhook. Based on
 [rundeck-slack-plugin](https://github.com/bitplaces/rundeck-slack-plugin)
 and run-hipchat-plugin.
 
-Version 0.8.0-yeast-bloom modernizes the build (Gradle 9 / Java 11 target),
-upgrades FreeMarker to 2.3.34, and fixes several bugs (proxy
-NullPointerException, UTF-8 payload encoding, JSON escaping in message
-templates). See [CHANGELOG.md](CHANGELOG.md) for details.
+Version 0.9.0-yeast-bloom adds support for **Workflows (Power Automate)
+webhooks** with Adaptive Cards — required because Microsoft retired the
+Office 365 Connectors format this plugin originally used (retirement
+completed 2026-05-22, see [issue #6](https://github.com/bageera/rundeck-team-webhook/issues/6)).
+It also modernizes the build (Gradle 9 / Java 11 target), upgrades FreeMarker
+to 2.3.34, and fixes several bugs (proxy NullPointerException, UTF-8 payload
+encoding, JSON escaping in message templates). See [CHANGELOG.md](CHANGELOG.md).
 
 ## Download jarfile
 
@@ -35,14 +38,44 @@ Install locally from source:
 
 ## Configuration
 
-This plugin uses Teams Incoming Webhooks. In the Teams channel, add an
-"Incoming Webhook" connector, create one, and copy the URL it provides.
+### Workflows (Power Automate) webhooks — recommended
 
-![configuration](config.png)
+Microsoft retired connector webhooks; create a Workflows webhook instead:
 
-The only required configuration setting:
+1. In Teams: **Workflows** app → "Send messages in Teams using incoming
+   webhooks" template (or create a flow with the
+   **"When a Teams webhook request is received"** trigger).
+2. Copy the generated webhook URL (a `webhook.office.com` address).
+3. Paste it as the `WebHook URL` below.
 
-- `WebHook URL` — Teams Incoming Webhook URL.
+The plugin auto-detects Workflows URLs and posts an **Adaptive Card**
+(job name, color-coded status, execution link, "View in Rundeck" button).
+Workflows webhooks accept with HTTP 202 and an empty body.
+
+Note: messages post as the Flow bot; bot icon/name customization is not
+available for webhook posts (Microsoft limitation, not the plugin's).
+
+### Legacy Office 365 Connector webhooks
+
+If your tenant still had a connector webhook, its message cards
+(MessageCard format) are still supported — the plugin keeps the legacy
+payload for any non-`webhook.office.com` URL, or force it with
+`Message Format: card`. Screenshots:
+
+On success:
+
+![on success](on_success.png)
+
+On failure:
+
+![on failure](on_failure.png)
+
+### Settings
+
+- `WebHook URL` — Teams Incoming Webhook URL (required).
+- `Message Format` — `auto` (default: Adaptive Card for
+  `webhook.office.com` URLs, MessageCard otherwise), or pinned
+  `adaptive` / `card`.
 
 The webhook URL is a bearer credential for your channel — store it only in
 Rundeck configuration, never in source control. See
@@ -60,16 +93,6 @@ options):
 Optional proxy authentication:
 
     -Dhttp.proxyUser=domain\\user -Dhttp.proxyPassword=secret
-
-## Teams message examples
-
-On success:
-
-![on success](on_success.png)
-
-On failure:
-
-![on failure](on_failure.png)
 
 ## Contributors
 

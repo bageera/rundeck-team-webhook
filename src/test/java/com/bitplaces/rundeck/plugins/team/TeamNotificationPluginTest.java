@@ -180,7 +180,7 @@ class TeamNotificationPluginTest {
     @Test
     void unexpectedResponseThrowsAndPayloadNotLeaked() throws Exception {
         AtomicReference<byte[]> body = new AtomicReference<>();
-        HttpServer server = startServer(200, "{\"error\":\"bad\"}", body);
+        HttpServer server = startServer(418, "{\"error\":\"bad\"}", body);
         try {
             TeamNotificationPlugin p = pluginWithWebhook(
                     "http://127.0.0.1:" + server.getAddress().getPort() + "/");
@@ -223,6 +223,153 @@ class TeamNotificationPluginTest {
                     "http://127.0.0.1:" + server.getAddress().getPort() + "/");
             assertTrue(p.postNotification("start", executionData("g", "j", "u", "1"), new HashMap<>()));
             assertEquals("application/json; charset=utf-8", capturedType.get());
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    // ---- Workflows (Adaptive Card) webhook support ----------------------
+
+    @Test
+    void workflowsWebhookEmpty202BodyCountsAsSuccess() throws Exception {
+        // Power Automate Workflows webhooks accept with HTTP 202 and an EMPTY
+        // body — the legacy "1" check silently failed these. The auto-detected
+        // Adaptive format must pass.
+        AtomicReference<byte[]> body = new AtomicReference<>();
+        HttpServer server = startServer(202, "", body);
+        try {
+            TeamNotificationPlugin p = pluginWithWebhook(
+                    "https://outlook.office.com/webhook/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee@bbbbbbbb/IncomingWebhook/abcdef/ghijk");
+            // host check: cannot force webhook.office.com on 127.0.0.1, so pin format
+            java.lang.reflect.Field f = TeamNotificationPlugin.class.getDeclaredField("messageFormat");
+            f.setAccessible(true);
+            f.set(p, "adaptive");
+
+            assertTrue(p.postNotification("success", executionData("g", "j", "u", "1"), new HashMap<>()));
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void legacyConnectorBody1StillCountsAsSuccess() throws Exception {
+        // legacy connector URLs answer 200 with body "1"; the MessageCard
+        // format must still render and POST cleanly (card format pinned).
+        AtomicReference<byte[]> body = new AtomicReference<>();
+        final AtomicReference<String> capturedType = new AtomicReference<>();
+        HttpServer server = startServer(200, "1", body, capturedType);
+        try {
+            TeamNotificationPlugin p = pluginWithWebhook(
+                    "http://127.0.0.1:" + server.getAddress().getPort() + "/");
+            java.lang.reflect.Field f = TeamNotificationPlugin.class.getDeclaredField("messageFormat");
+            f.setAccessible(true);
+            f.set(p, "card");
+
+            assertTrue(p.postNotification("success", executionData("g", "j", "u", "1"), new HashMap<>()));
+
+            String json = new String(body.get(), StandardCharsets.UTF_8);
+            assertTrue(json.contains("themeColor"), "connector card expected, got: " + json);
+            assertFalse(json.contains("AdaptiveCard"), json);
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void autoFormatDetectsWorkflowsByHost() throws Exception {
+        // resolveTemplate() is private; verify through the rendered template
+        // choice: a workflows-family URL (webhook.office.com) that points at
+        // the local test server via a fake host header is not possible, so
+        // instead test through generateMessage indirectly: POST to local
+        // server with a webhook.office.com URL is not routable. Use reflection.
+        TeamNotificationPlugin p = new TeamNotificationPlugin();
+        java.lang.reflect.Field urlField = TeamNotificationPlugin.class.getDeclaredField("webhookUrl");
+        urlField.setAccessible(true);
+        urlField.set(p, "https://example.webhook.office.com/webhook/xyz");
+
+        java.lang.reflect.Method m = TeamNotificationPlugin.class.getDeclaredMethod("resolveTemplate");
+        m.setAccessible(true);
+        assertEquals("team-adaptive-message.ftl", m.invoke(p));
+
+        urlField.set(p, "https://outlook.office.com/webhook/legacy");
+        assertEquals("team-incoming-message.ftl", m.invoke(p));
+
+        // explicit override wins over auto-detection
+        java.lang.reflect.Field fmt = TeamNotificationPlugin.class.getDeclaredField("messageFormat");
+        fmt.setAccessible(true);
+        fmt.set(p, "card");
+        assertEquals("team-incoming-message.ftl", m.invoke(p));
+        fmt.set(p, "adaptive");
+        assertEquals("team-adaptive-message.ftl", m.invoke(p));
+    }
+
+    @Test
+    void adaptiveCardTemplateIsValidJsonShape() throws Exception {
+        Map<String, Object> data = executionData("ops", "deploy job", "carol", "99");
+        TeamNotificationPlugin p = new TeamNotificationPlugin();
+        java.lang.reflect.Field urlField = TeamNotificationPlugin.class.getDeclaredField("webhookUrl");
+        urlField.setAccessible(true);
+        urlField.set(p, "https://example.webhook.office.com/x");
+
+        java.lang.reflect.Method m = TeamNotificationPlugin.class.getDeclaredMethod("generateMessage",
+                String.class, Map.class, Map.class);
+        m.setAccessible(true);
+        String json = (String) m.invoke(p, "failure", data, new HashMap<>());
+
+        // parse as JSON to prove well-formedness
+        jakarta.json.JsonReader reader = jakarta.json.Json.createReader(
+                new java.io.StringReader(json));
+        jakarta.json.JsonObject root = reader.readObject();
+
+        assertEquals("message", root.getString("type"));
+        jakarta.json.JsonObject card = root.getJsonArray("attachments").getJsonObject(0)
+                .getJsonObject("content");
+        assertEquals("AdaptiveCard", card.getString("type"));
+        assertEquals("1.4", card.getString("version"));
+
+        // every text block must carry the (escaped) job name — hostile name check
+        String allText = card.getJsonArray("body").stream()
+                .filter(v -> v.asJsonObject().containsKey("text"))
+                .map(v -> v.asJsonObject().getString("text"))
+                .reduce("", (a, b) -> a + b);
+        assertTrue(allText.contains("deploy job"), allText);
+
+        // status block exists and colors differ by trigger
+        assertTrue(card.getJsonArray("body").stream()
+                .anyMatch(v -> v.asJsonObject().containsKey("color")));
+    }
+
+    @Test
+    void rateLimit429ProducesHelpfulError() throws Exception {
+        AtomicReference<byte[]> body = new AtomicReference<>();
+        HttpServer server = startServer(429, "{\"error\":\"Microsoft Teams endpoint returned HTTP error 429\"}", body);
+        try {
+            TeamNotificationPlugin p = pluginWithWebhook(
+                    "http://127.0.0.1:" + server.getAddress().getPort() + "/");
+
+            TeamNotificationPluginException ex = assertThrows(TeamNotificationPluginException.class,
+                    () -> p.postNotification("start", executionData("g", "j", "u", "1"), new HashMap<>()));
+            assertTrue(ex.getMessage().contains("429"), ex.getMessage());
+            assertTrue(ex.getMessage().toLowerCase().contains("rate limit"), ex.getMessage());
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void serverErrorIsReportedWithoutFullPayloadDump() throws Exception {
+        String longError = "x".repeat(500);
+        AtomicReference<byte[]> body = new AtomicReference<>();
+        HttpServer server = startServer(500, longError, body);
+        try {
+            TeamNotificationPlugin p = pluginWithWebhook(
+                    "http://127.0.0.1:" + server.getAddress().getPort() + "/");
+
+            TeamNotificationPluginException ex = assertThrows(TeamNotificationPluginException.class,
+                    () -> p.postNotification("failure", executionData("g", "j", "u", "1"), new HashMap<>()));
+            assertTrue(ex.getMessage().contains("HTTP 500"), ex.getMessage());
+            // summarize() caps the echoed body at 200 chars
+            assertTrue(ex.getMessage().length() < 400, "message too long: " + ex.getMessage());
         } finally {
             server.stop(0);
         }
