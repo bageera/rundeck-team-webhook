@@ -29,6 +29,18 @@ repositories {
 dependencies {
     pluginLibs group: 'org.freemarker', name: 'freemarker', version: '2.3.34'
     compileOnly(group: 'org.rundeck', name: 'rundeck-core', version: '2.10.6')
+
+    testImplementation platform('org.junit:junit-bom:5.13.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    // rundeck-core is compileOnly for main, but tests exercise the plugin
+    // class directly, so they need it on the test compile+runtime classpath.
+    // It is NOT added to pluginLibs (never bundled into the plugin archive).
+    testImplementation(group: 'org.rundeck', name: 'rundeck-core', version: '2.10.6')
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
 }
 
 // task to copy plugin libs to output/lib dir
