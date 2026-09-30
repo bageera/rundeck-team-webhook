@@ -1,0 +1,42 @@
+name: CodeQL
+
+# Code scanning: static analysis of the plugin Java sources.
+# Alerts appear under Security -> Code scanning.
+
+on:
+  push:
+    branches: [master, 'release/**']
+  pull_request:
+  schedule:
+    - cron: '23 6 * * 1' # weekly, Mondays
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze (java-kotlin)
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: java-kotlin
+          # Buildless analysis: no Gradle build needed.
+          build-mode: none
+          # Extended security suite: taint tracking on the webhook URL /
+          # template interpolation paths, plus injection and resource handling.
+          queries: security-extended
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:java-kotlin'
